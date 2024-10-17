@@ -2,4 +2,5 @@ flask
 flask_restful
 flask_sqlalchemy
 flask_login
-sqlite3
+flask_cors
+werkzeug
