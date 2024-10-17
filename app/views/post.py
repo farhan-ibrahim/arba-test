@@ -5,20 +5,22 @@ from flask_restful import Resource
 from app.models import Posts, db
 from app.views.error import handle_error
 
-post = Blueprint('post', __name__, url_prefix='/post')
+post = Blueprint('post', __name__)
 class Post(Resource):
-    @post.route('/all', methods=['GET'])
-    @login_required
-    def all():
+    # Public Endpoints
+    @post.route('/posts/all', methods=['GET'])
+    def get_all_posts():
         try:
-            posts = Posts.query.filter_by(user_id=current_user.id).all()
+            limit = request.args.get('limit', 10)
+            posts = Posts.query.order_by(Posts.created_at).limit(limit).all()
             data = []
             for post in posts:
                 data.append({
                     'id': post.id,
                     'image': post.image_url,
                     'caption': post.caption,
-                    'user_id': post.user_id
+                    'user_id': post.user_id,
+                    'comments_count': len(post.comments)
                 })
             return jsonify({
                 'status': 'success',
@@ -27,7 +29,80 @@ class Post(Resource):
         except Exception as e:
             handle_error(e, request)
 
-    @post.route('/create', methods=['GET','POST'])
+    @post.route('/post/<int:post_id>', methods=['GET'])
+    def get_by_id(post_id):
+        try:
+            post = Posts.query.filter_by(id=post_id).first()
+
+            if not post:
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Post not found'
+                }), 404
+            
+            return jsonify({
+                'status': 'success',
+                'data': {
+                    'id': post.id,
+                    'image': post.image_url,
+                    'caption': post.caption,
+                    'user_id': post.user_id,
+                    'comments': post.comments
+                }
+            }), 200
+        except Exception as e:
+            handle_error(e, request)
+
+    @post.route('/posts', methods=['GET'])
+    @login_required
+    def get_all_user_posts():
+        try:
+            limit = request.args.get('limit', 10)
+            posts = Posts.query.filter_by(user_id=current_user.id).limit(limit).all()
+            data = []
+            for post in posts:
+                data.append({
+                    'id': post.id,
+                    'image': post.image_url,
+                    'caption': post.caption,
+                    'user_id': post.user_id,
+                    'comments_count': len(post.comments)
+                })
+            return jsonify({
+                'status': 'success',
+                'data': data
+            }), 200
+        except Exception as e:
+            handle_error(e, request)
+
+    
+    @post.route('/post/<int:post_id>/comments', methods=['GET'])
+    def get_post_comments(post_id):
+        try:
+            post = Posts.query.filter_by(id=post_id).first()
+
+            if not post:
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Post not found'
+                }), 404
+            
+            data = []
+            for comment in post.comments:
+                data.append({
+                    'id': comment.id,
+                    'text': comment.text,
+                    'user_id': comment.user_id
+                })
+            
+            return jsonify({
+                'status': 'success',
+                'data': data
+            }), 200
+        except Exception as e:
+            handle_error(e, request)
+
+    @post.route('/post/create', methods=['GET','POST'])
     @login_required
     def create():
         if request.method == 'POST':
@@ -54,7 +129,7 @@ class Post(Resource):
                 'message': 'Invalid request method'
             }), 405
         
-    @post.route('/delete/<int:post_id>', methods=['DELETE'])
+    @post.route('/post/delete/<int:post_id>', methods=['DELETE'])
     @login_required
     def delete(post_id):
         try:
@@ -81,7 +156,7 @@ class Post(Resource):
             handle_error(e, request)
 
 
-    @post.route('/update/<int:post_id>', methods=['PUT'])
+    @post.route('/post/update/<int:post_id>', methods=['PUT'])
     @login_required
     def update(post_id):
         try:

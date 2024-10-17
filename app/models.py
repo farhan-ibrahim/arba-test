@@ -16,12 +16,11 @@ class Base(db.Model):
 class Users(Base, UserMixin, db.Model):
     __tablename__ = 'users'
 
-    # id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password = db.Column(db.String(120), nullable=False)
     name = db.Column(db.String(120), nullable=False)
     posts = db.relationship('Posts', backref='author', lazy=True)
-    # comments = db.relationship('Comment', backref='author', lazy=True)
+    comments = db.relationship('Comments', backref='author', lazy=True)
     def set_password(self, password):
         self.password = generate_password_hash(password)
 
@@ -32,17 +31,19 @@ class Users(Base, UserMixin, db.Model):
         return f'<User {self.id} {self.email}>'
 
 class Posts(Base, db.Model):
-    # id = db.Column(db.Integer, primary_key=True)
+    __tablename__ = 'posts'
+
     image_url = db.Column(db.String(255))
     caption = db.Column(db.String(255))
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'))
-    # comments = db.relationship('Comment', backref='post', lazy=True)
+    comments = db.relationship('Comments', backref='post', lazy=True)
 
-# class Comment(db.Model):
-#     id = db.Column(db.Integer, primary_key=True)
-#     text = db.Column(db.String(255))
-#     user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
-#     post_id = db.Column(db.Integer, db.ForeignKey('post.id'))
+class Comments(Base, db.Model):
+    __tablename__ = 'comments'
+
+    text = db.Column(db.String(255))
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    post_id = db.Column(db.Integer, db.ForeignKey('posts.id'))
 
 def init_app(app):
     db.init_app(app)
