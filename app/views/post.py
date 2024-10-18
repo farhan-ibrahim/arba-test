@@ -15,11 +15,22 @@ class Post(Resource):
             posts = Posts.query.order_by(Posts.created_at).limit(limit).all()
             data = []
             for post in posts:
+                comments = []
+                for comment in post.comments:
+                    comments.append({
+                        'id': comment.id,
+                        'text': comment.text,
+                        'user_id': comment.user_id,
+                        'author': comment.author.name
+                    })
+
                 data.append({
                     'id': post.id,
                     'image': post.image_url,
                     'caption': post.caption,
                     'user_id': post.user_id,
+                    'author': post.author.name,
+                    'comments': comments,
                     'comments_count': len(post.comments)
                 })
             return jsonify({
@@ -61,11 +72,20 @@ class Post(Resource):
             posts = Posts.query.filter_by(user_id=current_user.id).limit(limit).all()
             data = []
             for post in posts:
+                comments = []
+                for comment in post.comments:
+                    comments.append({
+                        'id': comment.id,
+                        'text': comment.text,
+                        'user_id': comment.user_id
+                    })
+
                 data.append({
                     'id': post.id,
                     'image': post.image_url,
                     'caption': post.caption,
                     'user_id': post.user_id,
+                    'comments': comments,
                     'comments_count': len(post.comments)
                 })
             return jsonify({
