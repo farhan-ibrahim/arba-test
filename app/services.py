@@ -12,14 +12,14 @@ def load_user(user_id):
 
 @login_manager.request_loader
 def request_loader(request):
-    email = request.form.get('email')
+    email = request.headers.get('Authorization')
     user = Users.query.filter_by(email=email).first()
     return user if user else None
 
 @login_manager.unauthorized_handler
 def unauthorized():
     return jsonify({
-        'status': 'failed',
+        'status': 'error',
         'message': 'Unauthorized'
     }), 401
 

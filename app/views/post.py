@@ -127,8 +127,9 @@ class Post(Resource):
     def create():
         if request.method == 'POST':
             try:
-                image = request.form['image']
-                caption = request.form['caption']
+                args = request.get_json()
+                image = args['image']
+                caption = args['caption']
                 post = Posts(image_url=image, caption=caption, user_id=current_user.id)
                 db.session.add(post)
                 db.session.commit()
@@ -193,8 +194,9 @@ class Post(Resource):
                     'message': 'Unauthorized'
                 }), 401
 
-            image = request.form['image']
-            caption = request.form['caption']
+            args = request.get_json()
+            image = args['image']
+            caption = args['caption']
             post.image_url = image
             post.caption = caption
             db.session.commit()

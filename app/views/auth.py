@@ -12,22 +12,24 @@ class Auth(Resource):
     @auth.route('/register', methods=['GET','POST'])
     def register():
         if request.method == 'POST':
+            args = request.get_json()
+
             # Check if email is already in use
-            if Users.query.filter_by(email=request.form['email']).first():
-                return jsonify({'status': 'error', 'message': 'Email already exists'}), 400
+            if Users.query.filter_by(email=args['email']).first():
+                return jsonify({'status': 'error', 'message': 'Email already exists'}), 400           
 
             try:
-                email = request.form['email']
-                password = request.form['password']
-                name = request.form['name']
+                email = args['email']
+                password = args['password']
+                name = args['name']
                 user = Users(email=email, name=name)
                 user.set_password(password)
                 db.session.add(user)
                 db.session.commit()
-                
+
                 # Fetch the created user using email instead of ID (reduces DB query)
                 data = Users.query.filter_by(email=email).first()
-                print(user)
+
                 return jsonify({
                     'status': 'success',
                     'data': {
@@ -41,8 +43,9 @@ class Auth(Resource):
         
     @auth.route('/login', methods=['GET','POST'])
     def login():
-        email = request.form['email']
-        password = request.form['password']
+        args = request.get_json()
+        email = args['email']
+        password = args['password']
         user = Users.query.filter_by(email=email).first()
 
         if not user:

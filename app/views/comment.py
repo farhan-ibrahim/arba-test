@@ -12,8 +12,9 @@ class Comment(Resource):
     def create():
         if request.method == 'POST':
             try:
-                text = request.form['text']
-                post_id = request.form['post_id']
+                args = request.get_json()
+                text = args['text']
+                post_id = args['post_id']
                 comment = Comments(text=text, post_id=post_id, user_id=current_user.id)
                 db.session.add(comment)
                 db.session.commit()
@@ -78,7 +79,8 @@ class Comment(Resource):
                     'message': 'Unauthorized'
                 }), 401
 
-            text = request.form['text']
+            args = request.get_json()
+            text = args['text']
 
             comment.text = text
             db.session.commit()
