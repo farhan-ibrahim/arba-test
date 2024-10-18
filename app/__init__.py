@@ -6,7 +6,7 @@ def create_app():
     app = Flask(__name__)
     app.config['SECRET_KEY'] = 'your_secret_key'  # Replace with a strong secret key
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///my.db'  # Path to SQLite database
-    CORS(app)
+    CORS(app, supports_credentials=True)
     models.init_app(app)
     views.init_app(app)
     services.init_app(app)
