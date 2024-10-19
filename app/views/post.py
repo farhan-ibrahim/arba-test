@@ -2,7 +2,7 @@ from flask import Blueprint, jsonify, request
 from flask_login import current_user, login_required
 from flask_restful import Resource
 
-from app.models import Posts, db
+from firestore import db, firestore
 from app.views.error import handle_error
 
 post = Blueprint('post', __name__)
@@ -12,26 +12,28 @@ class Post(Resource):
     def get_all_posts():
         try:
             limit = request.args.get('limit', 10)
-            posts = Posts.query.order_by(Posts.created_at).limit(limit).all()
+            posts = db.collection('posts').limit(limit).get()
             data = []
             for post in posts:
+                user = db.collection('users').document(str(post.get("user_id"))).get()
                 comments = []
-                for comment in post.comments:
+                post_comments = db.collection('comments').where('post_id', '==', post.id).get()
+                for comment in post_comments:
                     comments.append({
                         'id': comment.id,
-                        'text': comment.text,
-                        'user_id': comment.user_id,
-                        'author': comment.author.name
+                        'text': comment.get("text"),
+                        'user_id': comment.get("user_id"),
+                        # 'author': author.get("name")
                     })
 
                 data.append({
                     'id': post.id,
-                    'image': post.image_url,
-                    'caption': post.caption,
-                    'user_id': post.user_id,
-                    'author': post.author.name,
+                    'image': post.get("image_url"),
+                    'caption': post.get("caption"),
+                    'user_id': post.get("user_id"),
+                    'author': user.get("name"),
                     'comments': comments,
-                    'comments_count': len(post.comments)
+                    'comments_count': len(post_comments)
                 })
             return jsonify({
                 'status': 'success',
@@ -40,10 +42,10 @@ class Post(Resource):
         except Exception as e:
             handle_error(e, request)
 
-    @post.route('/post/<int:post_id>', methods=['GET'])
+    @post.route('/post/<string:post_id>', methods=['GET'])
     def get_by_id(post_id):
         try:
-            post = Posts.query.filter_by(id=post_id).first()
+            post = db.collection('posts').document(post_id).get()
 
             if not post:
                 return jsonify({
@@ -51,14 +53,23 @@ class Post(Resource):
                     'message': 'Post not found'
                 }), 404
             
+            comments = []
+            post_comments = db.collection('comments').where('post_id', '==', post.id).get()
+            for comment in post_comments:
+                comments.append({
+                    'id': comment.id,
+                    'text': comment.get("text"),
+                    'user_id': comment.get("user_id"),
+                })
+            
             return jsonify({
                 'status': 'success',
                 'data': {
                     'id': post.id,
-                    'image': post.image_url,
-                    'caption': post.caption,
-                    'user_id': post.user_id,
-                    'comments': post.comments
+                    'image': post.get("image_url"),
+                    'caption': post.get("caption"),
+                    'user_id': post.get("user_id"),
+                    'comments': comments,
                 }
             }), 200
         except Exception as e:
@@ -69,24 +80,26 @@ class Post(Resource):
     def get_all_user_posts():
         try:
             limit = request.args.get('limit', 10)
-            posts = Posts.query.filter_by(user_id=current_user.id).limit(limit).all()
+            posts = db.collection('posts').where('user_id', '==', current_user.id).limit(limit).get()
+            # posts = Posts.query.filter_by(user_id=current_user.id).limit(limit).all()
             data = []
             for post in posts:
                 comments = []
-                for comment in post.comments:
+                post_comments = db.collection('comments').where('post_id', '==', int(post.id)).get()
+                for comment in post_comments:
                     comments.append({
                         'id': comment.id,
-                        'text': comment.text,
-                        'user_id': comment.user_id
+                        'text': comment.get("text"),
+                        'user_id': comment.get("user_id")
                     })
 
                 data.append({
                     'id': post.id,
-                    'image': post.image_url,
-                    'caption': post.caption,
-                    'user_id': post.user_id,
+                    'image': post.get("image_url"),
+                    'caption': post.get("caption"),
+                    'user_id': post.get("user_id"),
                     'comments': comments,
-                    'comments_count': len(post.comments)
+                    'comments_count': len(post_comments)
                 })
             return jsonify({
                 'status': 'success',
@@ -95,11 +108,11 @@ class Post(Resource):
         except Exception as e:
             handle_error(e, request)
 
-    
-    @post.route('/post/<int:post_id>/comments', methods=['GET'])
+    @post.route('/post/<string:post_id>/comments', methods=['GET'])
     def get_post_comments(post_id):
         try:
-            post = Posts.query.filter_by(id=post_id).first()
+            post = db.collection('posts').document(str(post_id)).get()
+            # post = Posts.query.filter_by(id=post_id).first()
 
             if not post:
                 return jsonify({
@@ -108,11 +121,12 @@ class Post(Resource):
                 }), 404
             
             data = []
-            for comment in post.comments:
+            post_comments = db.collection('comments').where('post_id', '==', int(post.id)).get()
+            for comment in post_comments:
                 data.append({
                     'id': comment.id,
-                    'text': comment.text,
-                    'user_id': comment.user_id
+                    'text': comment.get("text"),
+                    'user_id': comment.get("user_id")
                 })
             
             return jsonify({
@@ -130,16 +144,22 @@ class Post(Resource):
                 args = request.get_json()
                 image = args['image']
                 caption = args['caption']
-                post = Posts(image_url=image, caption=caption, user_id=current_user.id)
-                db.session.add(post)
-                db.session.commit()
+
+                update_time, post_ref = db.collection('posts').add({
+                    'image_url': image,
+                    'caption': caption,
+                    'user_id': current_user.id,
+                    'created_at': firestore.SERVER_TIMESTAMP,
+                    'updated_at': firestore.SERVER_TIMESTAMP
+                })
+                post = db.collection('posts').document(post_ref.id).get()
                 return jsonify({
                     'status': 'success',
                     'data': {
-                        'id': post.id,
-                        'image': post.image_url,
-                        'caption': post.caption,
-                        'user_id': post.user_id
+                        'id': post_ref.id,
+                        'image': post.get("image_url"),
+                        'caption': post.get("caption"),
+                        'user_id': post.get("user_id")
                     }
                 }), 200
             except Exception as e:
@@ -150,25 +170,25 @@ class Post(Resource):
                 'message': 'Invalid request method'
             }), 405
         
-    @post.route('/post/delete/<int:post_id>', methods=['DELETE'])
+    @post.route('/post/delete/<string:post_id>', methods=['DELETE'])
     @login_required
     def delete(post_id):
         try:
-            post = Posts.query.filter_by(id=post_id).first()
+            post = db.collection('posts').document(post_id).get()
             if not post:
                 return jsonify({
                     'status': 'error',
                     'message': 'Post not found'
                 }), 404
 
-            if post.user_id != current_user.id:
+            if post.get("user_id") != current_user.id:
                 return jsonify({
                     'status': 'error',
                     'message': 'Unauthorized'
                 }), 401
             
-            db.session.delete(post)
-            db.session.commit()
+            db.collection('posts').document(post_id).delete()
+            
             return jsonify({
                 'status': 'success',
                 'data': None
@@ -177,18 +197,18 @@ class Post(Resource):
             handle_error(e, request)
 
 
-    @post.route('/post/update/<int:post_id>', methods=['PUT'])
+    @post.route('/post/update/<string:post_id>', methods=['PUT'])
     @login_required
     def update(post_id):
         try:
-            post = Posts.query.filter_by(id=post_id).first()
+            post = db.collection('posts').document(post_id).get()
             if not post:
                 return jsonify({
                     'status': 'error',
                     'message': 'Post not found'
                 }), 404
 
-            if post.user_id != current_user.id:
+            if post.get("user_id") != current_user.id:
                 return jsonify({
                     'status': 'error',
                     'message': 'Unauthorized'
@@ -197,16 +217,22 @@ class Post(Resource):
             args = request.get_json()
             image = args['image']
             caption = args['caption']
-            post.image_url = image
-            post.caption = caption
-            db.session.commit()
+        
+            db.collection('posts').document(post_id).update({
+                'image_url': image,
+                'caption': caption,
+                'updated_at': firestore.SERVER_TIMESTAMP
+            })
+
+            updated_post = db.collection('posts').document(post_id).get()
+
             return jsonify({
                 'status': 'success',
                 'data': {
-                    'id': post.id,
-                    'image': post.image_url,
-                    'caption': post.caption,
-                    'user_id': post.user_id
+                    'id': updated_post.id,
+                    'image': updated_post.get("image_url"),
+                    'caption': updated_post.get("caption"),
+                    'user_id': updated_post.get("user_id")
                 }
             }), 200
         except Exception as e:

@@ -1,6 +1,8 @@
 from flask import Flask
 from flask_cors import CORS
 
+import firestore
+
 def create_app():
     from . import models, views, services
     app = Flask(__name__)

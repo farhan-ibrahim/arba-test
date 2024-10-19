@@ -2,7 +2,7 @@ from flask import Blueprint, jsonify, request
 from flask_login import current_user, login_required
 from flask_restful import Resource
 
-from app.models import Comments, db
+from firestore import db, firestore
 from app.views.error import handle_error
 
 comment = Blueprint('comment', __name__, url_prefix='/comment')
@@ -15,16 +15,24 @@ class Comment(Resource):
                 args = request.get_json()
                 text = args['text']
                 post_id = args['post_id']
-                comment = Comments(text=text, post_id=post_id, user_id=current_user.id)
-                db.session.add(comment)
-                db.session.commit()
+                print(current_user.id)
+                update_time, comment_ref = db.collection('comments').add({
+                    'text': text,
+                    'post_id': post_id,
+                    'user_id': current_user.id,
+                    'created_at': firestore.SERVER_TIMESTAMP,
+                    'updated_at': firestore.SERVER_TIMESTAMP
+                })
+
+                comment = db.collection('comments').document(comment_ref.id).get()
+        
                 return jsonify({
                     'status': 'success',
                     'data': {
-                        'id': comment.id,
-                        'text': comment.text,
-                        'post_id': comment.post_id,
-                        'user_id': comment.user_id
+                        'id': comment_ref.id,
+                        'text': comment.get("text"),
+                        'post_id': comment.get("post_id"),
+                        'user_id': comment.get("user_id")
                     }
                 }), 200
             except Exception as e:
@@ -35,25 +43,24 @@ class Comment(Resource):
                 'message': 'Invalid request method'
             }), 405
         
-    @comment.route('/delete/<int:comment_id>', methods=['DELETE'])
+    @comment.route('/delete/<string:comment_id>', methods=['DELETE'])
     @login_required
     def delete(comment_id):
         try:
-            comment = Comments.query.filter_by(id=comment_id).first()
+            comment = db.collection('comments').document(comment_id).get()
             if not comment:
                 return jsonify({
                     'status': 'error',
                     'message': 'Comment not found'
                 }), 404
 
-            if comment.user_id != current_user.id:
+            if comment.get("user_id") != current_user.id:
                 return jsonify({
                     'status': 'error',
                     'message': 'Unauthorized'
                 }), 401
             
-            db.session.delete(comment)
-            db.session.commit()
+            db.collection('comments').document(comment_id).delete()
             return jsonify({
                 'status': 'success',
                 'data': None
@@ -62,18 +69,18 @@ class Comment(Resource):
             handle_error(e, request)
 
 
-    @comment.route('/update/<int:comment_id>', methods=['PUT'])
+    @comment.route('/update/<string:comment_id>', methods=['PUT'])
     @login_required
     def update(comment_id):
         try:
-            comment = Comments.query.filter_by(id=comment_id).first()
+            comment = db.collection('comments').document(comment_id).get()
             if not comment:
                 return jsonify({
                     'status': 'error',
                     'message': 'Post not found'
                 }), 404
 
-            if comment.user_id != current_user.id:
+            if comment.get("user_id") != current_user.id:
                 return jsonify({
                     'status': 'error',
                     'message': 'Unauthorized'
@@ -82,15 +89,20 @@ class Comment(Resource):
             args = request.get_json()
             text = args['text']
 
-            comment.text = text
-            db.session.commit()
+            db.collection('comments').document(comment_id).update({
+                'text': text,
+                'updated_at': firestore.SERVER_TIMESTAMP
+            })
+
+            updated_comment = db.collection('comments').document(comment_id).get()
+
             return jsonify({
                 'status': 'success',
                 'data': {
-                    'id': comment.id,
-                    'text': comment.text,
-                    'post_id': comment.post_id,
-                    'user_id': comment.user_id
+                    'id': updated_comment.id,
+                    'text': updated_comment.get("text"),
+                    'post_id': updated_comment.get("post_id"),
+                    'user_id': updated_comment.get("user_id")
                 }
             }), 200
         except Exception as e:

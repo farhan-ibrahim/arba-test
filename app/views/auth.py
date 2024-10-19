@@ -2,8 +2,11 @@
 from flask import Blueprint, jsonify, request
 from flask_login import login_required, login_user, logout_user
 from flask_restful import Resource
+import werkzeug
+import werkzeug.security
 
-from app.models import Users, db
+from app.models import Users
+from firestore import db, firestore
 from app.views.error import handle_error
 
 
@@ -15,27 +18,34 @@ class Auth(Resource):
             args = request.get_json()
 
             # Check if email is already in use
-            if Users.query.filter_by(email=args['email']).first():
+            if db.collection('users').where('email', '==', args['email']).get():
                 return jsonify({'status': 'error', 'message': 'Email already exists'}), 400           
 
             try:
                 email = args['email']
                 password = args['password']
                 name = args['name']
+              
+                update_time, user_ref = db.collection('users').add({
+                    'email': email,
+                    'name': name,
+                    'password': werkzeug.security.generate_password_hash(password),
+                    'created_at': firestore.SERVER_TIMESTAMP,
+                    'updated_at': firestore.SERVER_TIMESTAMP,
+                })
+
                 user = Users(email=email, name=name)
                 user.set_password(password)
-                db.session.add(user)
-                db.session.commit()
 
                 # Fetch the created user using email instead of ID (reduces DB query)
-                data = Users.query.filter_by(email=email).first()
+                user = db.collection('users').document(user_ref.id).get()
 
                 return jsonify({
                     'status': 'success',
                     'data': {
-                        'id': data.id,
-                        'email': data.email,
-                        'name': data.name
+                        'id': user.id,
+                        'email': user.get("email"),
+                        'name': user.get("name")
                     }
                 }), 200
             except Exception as e:
@@ -46,16 +56,17 @@ class Auth(Resource):
         args = request.get_json()
         email = args['email']
         password = args['password']
-        user = Users.query.filter_by(email=email).first()
-
-        if not user:
+        users = db.collection('users').where('email','==', email).get()
+        
+        if not users or len(users) == 0:
             print('User not found')
             return jsonify({
                 'status': 'error',
                 'message': 'User not found'
             }), 404
         
-        if not user.check_password(password):
+        user = users[0]
+        if not werkzeug.security.check_password_hash(user.get("password"), password):
             print('Invalid credentials')
             return jsonify({ 
                 'status': 'error',
@@ -63,14 +74,14 @@ class Auth(Resource):
             }), 401
         
         try:
-            login = login_user(user)
+            login = login_user(Users(id=user.id))
             if login:
                 return jsonify({
                     'status': 'success',
                     'data': {
                         'id': user.id,
-                        'email': user.email,
-                        'name': user.name
+                        'email': user.get("email"),
+                        'name': user.get("name")
                     }
                 }), 200
             else : 
